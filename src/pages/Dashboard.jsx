@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaLeaf, FaUsers, FaBoxOpen, FaChartLine } from "react-icons/fa";
-import axios from "axios";
+import { api } from "../api";
+import { toast } from "sonner";
 
 function Dashboard() {
  
@@ -22,7 +23,19 @@ function Dashboard() {
 
 
   useEffect(() => {
-    // TODO fetch plants data from server
+    const fetchPlantsData = async () => {
+      try {
+        // Fetch plants data - limit to 5 for dashboard recent plants view
+        const response = await api.get("/plants?page=1&per_page=5");
+        const { data } = response.data;
+        setPlants(data);
+      } catch (error) {
+        console.error(error);
+        toast.error("Error loading plants data.");
+      }
+    };
+
+    fetchPlantsData();
   }, []);
 
   return (

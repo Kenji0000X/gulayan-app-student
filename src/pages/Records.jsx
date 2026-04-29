@@ -21,12 +21,55 @@ function Records() {
   const observerTarget = useRef(null);
   const isInInitialMount = useRef(true);
 
-  const handleSearchPlants = async () => {
-    // TODO search from the the backend; in case that all records is not yet loaded
+  const handleSearchPlants = async (searchQuery = '') => {
+    try {
+      if (!searchQuery.trim()) {
+        // If search is empty, load all records again
+        setCurrentPage(1);
+        setHasMore(true);
+        handleLoadRecords(1, false);
+        return;
+      }
+
+      setIsLoading(true);
+      const response = await api.get(`/plants?search=${encodeURIComponent(searchQuery)}&page=1&per_page=10`);
+      const { data, pagination } = response.data;
+      
+      setRecords(data);
+      setHasMore(pagination.current_page < pagination.total_pages);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error searching records.");
+    } finally {
+      setIsLoading(false);
+    }
   }
   const handleLoadRecords = async (page = 1, append = false) => {
-    //TODO: load the data from the database
-    //TODO: implement paginated data loading
+    try {
+      if (!append) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+
+      const response = await api.get(`/plants?page=${page}&per_page=10`);
+      const { data, pagination } = response.data;
+
+      if (append) {
+        setRecords(prev => [...prev, ...data]);
+      } else {
+        setRecords(data);
+      }
+
+      // Check if there are more pages
+      setHasMore(pagination.current_page < pagination.total_pages);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error loading records.");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
   }
   const handleAddRecord = async (formData) => {
     try {
@@ -113,6 +156,7 @@ function Records() {
     if (searchTerm) {
       setCurrentPage(1);
       setHasMore(false);
+      handleSearchPlants(searchTerm);
     } else {
       setCurrentPage(1);
       setHasMore(true);
