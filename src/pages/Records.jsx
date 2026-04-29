@@ -21,35 +21,62 @@ function Records() {
   const observerTarget = useRef(null);
   const isInInitialMount = useRef(true);
 
-  const handleSearchPlants = async () => {
-    // TODO search from the the backend; in case that all records is not yet loaded
-  }
   const handleLoadRecords = async (page = 1, append = false) => {
-    //TODO: load the data from the database
-    //TODO: implement paginated data loading
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      const response = await api.get('plants', {
+        params: { page }
+      });
+
+      // Expecting standard Laravel-style pagination response or similar
+      const newRecords = response.data.data || [];
+      const totalPages = response.data.last_page || 1;
+
+      if (append) {
+        setRecords(prev => [...prev, ...newRecords]);
+      } else {
+        setRecords(newRecords);
+      }
+
+      setHasMore(page < totalPages);
+    } catch (error) {
+      console.error("Failed to load records:", error);
+      toast.error("Failed to load records from the server.");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
   }
+
   const handleAddRecord = async (formData) => {
     try {
-      //TODO: make add new record functional
+      const response = await api.post('plants', formData);
+      setRecords(prev => [response.data, ...prev]);
       toast.success("New record saved.");
+      setIsModalOpen(false);
     } catch (error) {
       console.error(error);
       toast.error("Error encountered while saving record.");
     }
-
-    setIsModalOpen(false)
   }
+
   const handleUpdateRecord = async (data) => {
     try {
-      //TODO make update record functional
+      const response = await api.put(`plants/${data.id}`, data);
+      setRecords(prev => prev.map(record => record.id === data.id ? response.data : record));
       toast.success("Plant data updated.");
+      setIsEditRecord(false);
     } catch (error) {
       console.error(error);
       toast.error("Error encountered during update.");
-    } finally {
-      setIsEditRecord(false);
     }
   }
+
   const handleDeleteRecord = async (data) => {
     try {
       const isDelete = confirm("Are you sure you want to delete this record?");
@@ -172,7 +199,7 @@ function Records() {
                 isLoading && records.length === 0 ?
                   (
                     <tr>
-                      <td colSpan={7} className='py-10'>
+                      <td colSpan={8} className='py-10'>
                         <PlantLoading size='2xl' variant='pulse' text="Loading records" />
                       </td>
                     </tr>
