@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { FaSearch, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { FaSearch, FaPlus, FaEdit, FaTrash, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import ModalNewRecord from './records/ModalNewRecord';
 import ModalEditRecord from './records/ModalEditRecord';
 import PlantLoading from '../components/PlantLoading';
@@ -7,7 +7,6 @@ import { api } from '../api';
 import { toast } from 'sonner';
 
 function Records() {
-  //TODO: add loading icon while ongoing ang loading ng records.
   const [records, setRecords] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,8 +16,6 @@ function Records() {
   //pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const observerTarget = useRef(null);
   const isInInitialMount = useRef(true);
 
   const handleSearchPlants = async () => {
@@ -34,25 +31,21 @@ function Records() {
       setIsLoading(false);
     }
   }
-  const handleLoadRecords = async (page = 1, append = false) => {
+
+  const handleLoadRecords = async (page = 1) => {
     try {
-      if (page === 1) {
-        setIsLoading(true);
-      } else {
-        setIsLoadingMore(true);
-      }
+      setIsLoading(true);
       
       const response = await api.get(`plants?page=${page}`);
       const newRecords = response.data.data;
       
-      setRecords(prev => append ? [...prev, ...newRecords] : newRecords);
-      setHasMore(newRecords.length > 0);
+      setRecords(newRecords);
+      // Assuming a page limit of 10. If we get exactly 10, there might be more.
+      setHasMore(newRecords.length === 10); 
     } catch (error) {
-      console.error(error);
       toast.error("Error loading records.");
     } finally {
       setIsLoading(false);
-      setIsLoadingMore(false);
     }
   }
   const handleAddRecord = async (formData) => {
@@ -84,57 +77,30 @@ function Records() {
   const handleDeleteRecord = async (data) => {
     try {
       const isDelete = confirm("Are you sure you want to delete this record?");
-      if (isDelete) {
-        await api.delete(`plants/${data.id}`, data);
-        setRecords(prev => prev?.filter( val => data.id !== val.id))
-        toast.success("Plant data deleted.");
+      if (!isDelete) return;
+
+      await api.delete(`plants/${data.id}`);
+      toast.success("Plant data deleted.");
+
+      // If the current page only had one item and we aren't on page 1, go back.
+      if (records.length === 1 && currentPage > 1) {
+        setCurrentPage(prev => prev - 1);
+      } else {
+        // Refresh current page to pull in the next available record from the next page
+        handleLoadRecords(currentPage);
       }
     } catch (error) {
-      console.error(error)
       toast.error("Error encountered while deleting record.");
     }
   }
-  const filteredRecords = records.filter(record =>
-    record.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.variety?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.seedling_source?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const loadMore = useCallback(() => {
-    if (!isLoadingMore && hasMore && !searchTerm) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      handleLoadRecords(nextPage, true);
-    }
-  }, [isLoadingMore, hasMore, currentPage, searchTerm]);
 
-  // initial record loading
+  // Load records whenever the page changes, provided we aren't searching
   useEffect(() => {
-    handleLoadRecords(1, false);
-  }, []);
-  // intersection observer for infine scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      }, { threshold: 0.1 }
-    );
-
-    const currentTarget = observerTarget.current;
-
-    if (currentTarget) {
-      observer.observe(currentTarget);
-    } else {
-      console.log("No target to observer.");
+    if (!searchTerm) {
+      handleLoadRecords(currentPage);
     }
+  }, [currentPage, searchTerm]);
 
-    return () => {
-      if (currentTarget) {
-        observer.unobserve(currentTarget);
-      }
-    }
-  }, [loadMore]);
   // reset pagination when searching
   useEffect(() => {
     if (isInInitialMount.current) {
@@ -148,7 +114,7 @@ function Records() {
     } else {
       setCurrentPage(1);
       setHasMore(true);
-      handleLoadRecords(1, false);
+      handleLoadRecords(1);
     }
   }, [searchTerm]);
 
@@ -182,7 +148,6 @@ function Records() {
       </div>
 
       {/* Records Table */}
-      {/* TODO implement pagination plants table */}
       <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto max-h-[580px] overflow-y-auto">
           <table className="relative w-full">
@@ -200,17 +165,16 @@ function Records() {
             </thead>
             <tbody>
 
-              {
-                isLoading && records.length === 0 ?
+              {isLoading && records.length === 0 ?
                   (
                     <tr>
-                      <td colSpan={7} className='py-10'>
+                      <td colSpan={8} className='py-10'>
                         <PlantLoading size='2xl' variant='pulse' text="Loading records" />
                       </td>
                     </tr>
                   ) : (
-                    <>
-                      {filteredRecords.map((record) => (
+                    <Fragment>
+                      {records.map((record) => (
                         <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-4 px-6 text-sm text-gray-800 font-medium">{record.name}</td>
                           <td className="py-4 px-6 text-sm text-gray-600">{record?.variety || "-"}</td>
@@ -236,45 +200,41 @@ function Records() {
                           </td>
                         </tr>
                       ))}
-
-                      {/* loading more indicator */}
-                      {
-                        isLoadingMore && (
-                          <tr>
-                            <td colSpan={8} className='py-6'>
-                              <PlantLoading size='lg' variant='pulse' text="Loading more records..." />
-                            </td>
-                          </tr>
-                        )
-                      }
-                      {/* intersection observer target */}
-                      {
-                        !searchTerm && hasMore && !isLoadingMore && (
-                          <tr ref={observerTarget}>
-                            <td colSpan={8} className='py-4 text-center text-gray-400 text-sm'>
-                              Scroll for more...
-                            </td>
-                          </tr>
-                        )
-                      }
-
-                    </>
+                    </Fragment>
                   )
               }
             </tbody>
           </table>
         </div>
 
-        {searchTerm && filteredRecords.length === 0 && (
+        {!isLoading && records.length === 0 && (
           <div className="text-center py-8 text-gray-500">
-            No records found matching your search.
+            {searchTerm ? "No records found matching your search." : "No records available."}
           </div>
         )}
 
-        {/* End of Records Indicator */}
-        {!hasMore && records.length > 0 && !searchTerm && (
-          <div className="text-center py-4 text-gray-400 text-sm border-t border-gray-100">
-            No more records to load
+        {/* Pagination Controls */}
+        {!searchTerm && (
+          <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
+            <div className="text-sm text-gray-600">
+              Showing page <span className="font-semibold text-green-700">{currentPage}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                disabled={currentPage === 1 || isLoading}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <FaChevronLeft className="text-gray-600" />
+              </button>
+              <button
+                disabled={!hasMore || isLoading}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <FaChevronRight className="text-gray-600" />
+              </button>
+            </div>
           </div>
         )}
       </div>
