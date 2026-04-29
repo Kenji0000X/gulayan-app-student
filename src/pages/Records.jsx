@@ -22,7 +22,21 @@ function Records() {
   const isInInitialMount = useRef(true);
 
   const handleSearchPlants = async () => {
-    // TODO search from the the backend; in case that all records is not yet loaded
+setIsLoading(true);
+  try {
+    const response = await api.get('/plants/search', { 
+      params: { q: searchTerm.trim(), page: 1, limit: 20 } 
+    });
+    setRecords(response.data.data || []);
+    setCurrentPage(1);
+    setHasMore(response.data.has_more || false);
+  } catch (error) {
+    console.error('Search error:', error);
+    toast.error('Search failed');
+  } finally {
+    setIsLoading(false);
+  }
+
   }
   const handleLoadRecords = async (page = 1, append = false) => {
     //TODO: load the data from the database
@@ -63,11 +77,7 @@ function Records() {
       toast.error("Error encountered while deleting record.");
     }
   }
-  const filteredRecords = records.filter(record =>
-    record.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.variety?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.seedling_source?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRecords = searchTerm ? records : records;
   const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore && !searchTerm) {
       const nextPage = currentPage + 1;
@@ -104,18 +114,11 @@ function Records() {
       }
     }
   }, [loadMore]);
-  // reset pagination when searching
+  // handle search
   useEffect(() => {
-    if (isInInitialMount.current) {
-      isInInitialMount.current = false;
-      return;
-    }
-    if (searchTerm) {
-      setCurrentPage(1);
-      setHasMore(false);
-    } else {
-      setCurrentPage(1);
-      setHasMore(true);
+    if (searchTerm.trim()) {
+      handleSearchPlants();
+    } else if (!isInInitialMount.current) {
       handleLoadRecords(1, false);
     }
   }, [searchTerm]);
