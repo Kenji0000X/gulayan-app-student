@@ -22,15 +22,43 @@ function Records() {
   const isInInitialMount = useRef(true);
 
   const handleSearchPlants = async () => {
-    // TODO search from the the backend; in case that all records is not yet loaded
+    try {
+      setIsLoading(true);
+      const response = await api.get(`plants/search?q=${searchTerm}`);
+      setRecords(response.data.data);
+      setHasMore(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error searching records.");
+    } finally {
+      setIsLoading(false);
+    }
   }
   const handleLoadRecords = async (page = 1, append = false) => {
-    //TODO: load the data from the database
-    //TODO: implement paginated data loading
+    try {
+      if (page === 1) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+      
+      const response = await api.get(`plants?page=${page}`);
+      const newRecords = response.data.data;
+      
+      setRecords(prev => append ? [...prev, ...newRecords] : newRecords);
+      setHasMore(newRecords.length > 0);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error loading records.");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
   }
   const handleAddRecord = async (formData) => {
     try {
-      //TODO: make add new record functional
+      const response = await api.post('plants', formData);
+      setRecords(prev => [response.data.data, ...prev]);
       toast.success("New record saved.");
     } catch (error) {
       console.error(error);
@@ -41,7 +69,10 @@ function Records() {
   }
   const handleUpdateRecord = async (data) => {
     try {
-      //TODO make update record functional
+      const response = await api.put(`plants/${data.id}`, data);
+      setRecords(prev => prev.map(record => 
+        record.id === data.id ? response.data.data : record
+      ));
       toast.success("Plant data updated.");
     } catch (error) {
       console.error(error);
@@ -113,6 +144,7 @@ function Records() {
     if (searchTerm) {
       setCurrentPage(1);
       setHasMore(false);
+      handleSearchPlants();
     } else {
       setCurrentPage(1);
       setHasMore(true);
