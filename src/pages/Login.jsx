@@ -33,10 +33,14 @@ function Login() {
         password: formData.password
       })
 
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token)
-        navigate('/dashboard')
+      const token = response?.data?.token
+      if (!token) {
+        setError('Login failed. Missing token from server.')
+        return
       }
+
+      localStorage.setItem('token', token)
+      navigate('/dashboard')
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'Login failed. Please try again.'
       setError(errorMessage)
@@ -48,6 +52,7 @@ function Login() {
   return (
     <div className="min-h-screen bg-green-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
+
         {/* Logo/Header Section */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-green-600 
@@ -61,6 +66,7 @@ function Login() {
           <h1 className="text-4xl font-bold text-green-800 mb-2">Gulayan</h1>
           <p className="text-green-600">Magtanim ay di biro.</p>
         </div>
+
 
         {/* Login Form Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-green-100">
@@ -146,7 +152,9 @@ function Login() {
           <p className="mt-6 text-center text-sm text-gray-600">
             Don't have an account?{' '}
             <button
-              onClick={() => navigate('/signup')}
+              onClick={() => {
+                if (!isLoading) navigate('/signup')
+              }}
               disabled={isLoading}
               className="cursor-pointer text-green-600 hover:text-green-700 font-semibold disabled:text-gray-400 disabled:cursor-not-allowed">
               Sign up for free
