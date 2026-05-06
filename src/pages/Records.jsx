@@ -16,26 +16,14 @@ function Records() {
   //pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  // search pagination states
-  const [searchPage, setSearchPage] = useState(1);
-  const [hasMoreSearch, setHasMoreSearch] = useState(true);
   const isInInitialMount = useRef(true);
 
-  const handleSearchPlants = async (page = 1) => {
+  const handleSearchPlants = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get(`plants/search?q=${searchTerm}&page=${page}`);
-      const newRecords = response.data.data;
-      
-      if (page === 1) {
-        setRecords(newRecords);
-      } else {
-        // Append results for pagination
-        setRecords(prev => [...prev, ...newRecords]);
-      }
-      
-      // Check if there are more results available (assuming page limit of 10)
-      setHasMoreSearch(newRecords.length === 10);
+      const response = await api.get(`plants/search?q=${searchTerm}`);
+      setRecords(response.data.data);
+      setHasMore(false);
     } catch (error) {
       console.error(error);
       toast.error("Error searching records.");
@@ -44,20 +32,30 @@ function Records() {
     }
   }
 
+  // Fetch paginated plant records from the database
+  // @param {number} page - The page number to fetch (default: 1)
   const handleLoadRecords = async (page = 1) => {
     try {
       setIsLoading(true);
       
+      // Make API request to fetch plants with pagination
       const response = await api.get(`plants?page=${page}`);
       const newRecords = response.data.data;
       
+      // Update records state with fetched data
       setRecords(newRecords);
-      // Check if we got a full page of records (10 items = full page, so there might be more)
-      // If we get less than 10, we're on the last page
-      setHasMore(newRecords.length >= 10); 
+      
+      // Determine if there are more pages available
+      // First, check if API response includes per_page metadata, otherwise default to 10
+      // If the number of records returned equals the page size, there's likely another page
+      const pageSize = response.data.per_page || 10;
+      const hasMorePages = newRecords.length === pageSize;
+      setHasMore(hasMorePages); 
     } catch (error) {
+      console.error(error);
       toast.error("Error loading records.");
     } finally {
+      // Always stop loading regardless of success or failure
       setIsLoading(false);
     }
   }
@@ -92,36 +90,40 @@ function Records() {
       const isDelete = confirm("Are you sure you want to delete this record?");
       if (!isDelete) return;
 
-      // Store the original records in case we need to restore them
-      const originalRecords = records;
-      const wasLastItemOnPage = records.length === 1;
-
-      // Optimistically remove the record from the UI
-      setRecords(prev => prev.filter(record => record.id !== data.id));
-
-      // Make the API call
       await api.delete(`plants/${data.id}`);
       toast.success("Plant data deleted.");
 
-      // Handle pagination after successful deletion
-      if (wasLastItemOnPage && currentPage > 1) {
-        // If this was the last item on this page and we're not on page 1, go back
+      // If the current page only had one item and we aren't on page 1, go back.
+      if (records.length === 1 && currentPage > 1) {
         setCurrentPage(prev => prev - 1);
+      } else {
+        // Refresh current page to pull in the next available record from the next page
+        handleLoadRecords(currentPage);
       }
     } catch (error) {
-      console.error(error);
-      // Restore the original records if deletion failed
-      setRecords(originalRecords);
       toast.error("Error encountered while deleting record.");
     }
   }
 
   // Load records whenever the page changes, provided we aren't searching
+  // This effect re-runs whenever currentPage or searchTerm changes
   useEffect(() => {
     if (!searchTerm) {
       handleLoadRecords(currentPage);
     }
   }, [currentPage, searchTerm]);
+
+  // Initialize data load on component mount
+  // This effect runs once when the Records component is first rendered
+  // Uses isInInitialMount ref to ensure data is only loaded once
+  useEffect(() => {
+    if (isInInitialMount.current) {
+      // Load first page of records from database
+      handleLoadRecords(1);
+      // Mark that initial mount is complete to prevent duplicate loads
+      isInInitialMount.current = false;
+    }
+  }, []);
 
   // reset pagination when searching
   useEffect(() => {
@@ -130,9 +132,9 @@ function Records() {
       return;
     }
     if (searchTerm) {
-      setSearchPage(1);
-      setHasMoreSearch(true);
-      handleSearchPlants(1);
+      setCurrentPage(1);
+      setHasMore(false);
+      handleSearchPlants();
     } else {
       setCurrentPage(1);
       setHasMore(true);
@@ -252,39 +254,6 @@ function Records() {
               <button
                 disabled={!hasMore || isLoading}
                 onClick={() => setCurrentPage(prev => prev + 1)}
-                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                <FaChevronRight className="text-gray-600" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Search Results Pagination Controls */}
-        {searchTerm && (
-          <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
-            <div className="text-sm text-gray-600">
-              Showing search results <span className="font-semibold text-green-700">page {searchPage}</span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={searchPage === 1 || isLoading}
-                onClick={() => {
-                  const prevPage = searchPage - 1;
-                  setSearchPage(prevPage);
-                  handleSearchPlants(prevPage);
-                }}
-                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
-              >
-                <FaChevronLeft className="text-gray-600" />
-              </button>
-              <button
-                disabled={!hasMoreSearch || isLoading}
-                onClick={() => {
-                  const nextPage = searchPage + 1;
-                  setSearchPage(nextPage);
-                  handleSearchPlants(nextPage);
-                }}
                 className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
               >
                 <FaChevronRight className="text-gray-600" />
