@@ -1,28 +1,53 @@
 import { useEffect, useState } from "react";
 import { FaLeaf, FaUsers, FaBoxOpen, FaChartLine } from "react-icons/fa";
-import axios from "axios";
+import { api } from "../api";
+import { toast } from "sonner";
+import PlantLoading from "../components/PlantLoading";
 
 function Dashboard() {
  
+ 
   const [plants, setPlants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const stats = [
     {
       title: "Total Plants",
-      value: "156",
+      value: plants.length.toString(),
       icon: FaLeaf,
       color: "bg-green-100 text-green-600",
     },
     {
       title: "Estimated Counts",
-      value: "1,234",
+      value: plants.reduce((sum, plant) => sum + (parseInt(plant.estimated_count || plant.seedling_count || 0) || 0), 0).toLocaleString(),
       icon: FaUsers,
       color: "bg-blue-100 text-blue-600",
     }
   ];
 
-
   useEffect(() => {
-    // TODO fetch plants data from server
+    const fetchPlants = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await api.get('/plants?page=1&limit=5'); // Fetch recent 5 for dashboard
+        const fetchedPlants = response.data.data || [];
+        // Map fields if needed
+        setPlants(fetchedPlants.map(plant => ({
+          ...plant,
+          estimated_count: plant.estimated_count || plant.seedling_count || '0'
+        })));
+      } catch (err) {
+        console.error('Fetch plants error:', err);
+        setError(err.message || 'Failed to fetch plants');
+        toast.error('Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlants();
   }, []);
 
   return (
@@ -75,29 +100,49 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {plants.map((plant) => (
-                <tr
-                  key={`plant-${plant.id}`}
-                  className="border-b border-gray-100 hover:bg-gray-50"
-                >
-                  <td className="py-3 px-4 text-sm text-gray-600">
-                    {plant.name}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-800">
-                    {plant.variety}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-600">
-                    {plant.estimated_count}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-800 font-medium">
-                    {new Date(plant.date_planted).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center">
+                    <PlantLoading size="lg" />
                   </td>
                 </tr>
-              ))}
+              ) : error ? (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center text-red-500">
+                    Error loading plants: {error}
+                  </td>
+                </tr>
+              ) : plants.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-12 text-center text-gray-500">
+                    No plants found.
+                  </td>
+                </tr>
+              ) : (
+                plants.map((plant) => (
+                  <tr
+                    key={`plant-${plant.id}`}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {plant.name}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-800">
+                      {plant.variety}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">
+                      {plant.estimated_count}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-800 font-medium">
+                      {new Date(plant.date_planted).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
