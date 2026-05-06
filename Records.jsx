@@ -1,168 +1,294 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { MdDelete, MdChevronLeft, MdChevronRight, MdRefresh } from 'react-icons/md';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { FaSearch, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
+import ModalNewRecord from './records/ModalNewRecord';
+import ModalEditRecord from './records/ModalEditRecord';
+import PlantLoading from '../components/PlantLoading';
+import { api } from '../api';
+import { toast } from 'sonner';
 
-const Records = () => {
-  const [plants, setPlants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // Pagination State
+function Records() {
+  //TODO: add loading icon while ongoing ang loading ng records.
+  const [records, setRecords] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dataToUpdate, setDataToUpdate] = useState(null);
+  const [isEditRecord, setIsEditRecord] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  //pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const plantsPerPage = 5;
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const observerTarget = useRef(null);
+  const isInInitialMount = useRef(true);
 
-  useEffect(() => {
-    fetchPlants();
-  }, []);
-
-  const fetchPlants = async () => {
-    try {
-      setLoading(true);
-      // Note: Ensure your axios baseURL is configured in a separate service or .env
-      const response = await axios.get('/api/plants');
-      setPlants(response.data);
-      setError('');
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError('Failed to fetch plant records. Please check your connection.');
-    } finally {
-      setLoading(false);
+  const handleLoadRecords = async (page = 1, append = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
     }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this plant record?')) return;
 
     try {
-      await axios.delete(`/api/plants/${id}`);
-      
-      // Remove from local state
-      const updatedPlants = plants.filter((plant) => plant.id !== id);
-      setPlants(updatedPlants);
+      const response = await api.get('plants', {
+        params: { page }
+      });
 
-      // If the current page becomes empty after deletion, move back a page
-      const newTotalPages = Math.ceil(updatedPlants.length / plantsPerPage);
-      if (currentPage > newTotalPages && newTotalPages > 0) {
-        setCurrentPage(newTotalPages);
+      // Expecting standard Laravel-style pagination response or similar
+      const newRecords = response.data.data || [];
+      const totalPages = response.data.last_page || 1;
+
+      if (append) {
+        setRecords(prev => [...prev, ...newRecords]);
+      } else {
+        setRecords(newRecords);
       }
-    } catch (err) {
-      console.error('Delete error:', err);
-      alert('Error deleting the record. Please try again.');
+
+      setHasMore(page < totalPages);
+    } catch (error) {
+      console.error("Failed to load records:", error);
+      toast.error("Failed to load records from the server.");
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  };
-
-  // Pagination Calculations
-  const indexOfLastPlant = currentPage * plantsPerPage;
-  const indexOfFirstPlant = indexOfLastPlant - plantsPerPage;
-  const currentPlants = plants.slice(indexOfFirstPlant, indexOfLastPlant);
-  const totalPages = Math.ceil(plants.length / plantsPerPage);
-
-  const paginate = (pageNumber) => {
-    if (pageNumber >= 1 && pageNumber <= totalPages) {
-      setCurrentPage(pageNumber);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-green-600">
-        <div className="animate-spin mb-4"><MdRefresh size={40} /></div>
-        <p className="font-medium">Loading records...</p>
-      </div>
-    );
   }
 
+  const handleAddRecord = async (formData) => {
+    try {
+      const response = await api.post('plants', formData);
+      setRecords(prev => [response.data, ...prev]);
+      toast.success("New record saved.");
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error encountered while saving record.");
+    }
+  }
+
+  const handleUpdateRecord = async (data) => {
+    try {
+      const response = await api.put(`plants/${data.id}`, data);
+      setRecords(prev => prev.map(record => record.id === data.id ? response.data : record));
+      toast.success("Plant data updated.");
+      setIsEditRecord(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error encountered during update.");
+    }
+  }
+
+  const handleDeleteRecord = async (data) => {
+    try {
+      const isDelete = confirm("Are you sure you want to delete this record?");
+      if (isDelete) {
+        await api.delete(`plants/${data.id}`, data);
+        setRecords(prev => prev?.filter( val => data.id !== val.id))
+        toast.success("Plant data deleted.");
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error("Error encountered while deleting record.");
+    }
+  }
+  const filteredRecords = records.filter(record =>
+    record.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    record.variety?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    record.seedling_source?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  const loadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore && !searchTerm) {
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      handleLoadRecords(nextPage, true);
+    }
+  }, [isLoadingMore, hasMore, currentPage, searchTerm]);
+
+  // initial record loading
+  useEffect(() => {
+    handleLoadRecords(1, false);
+  }, []);
+  // intersection observer for infine scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      }, { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    } else {
+      console.log("No target to observer.");
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    }
+  }, [loadMore]);
+  // reset pagination when searching
+  useEffect(() => {
+    if (isInInitialMount.current) {
+      isInInitialMount.current = false;
+      return;
+    }
+    if (searchTerm) {
+      setCurrentPage(1);
+      setHasMore(false);
+    } else {
+      setCurrentPage(1);
+      setHasMore(true);
+      handleLoadRecords(1, false);
+    }
+  }, [searchTerm]);
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-          🌿 Plant Inventory
-        </h1>
-        <button 
-          onClick={fetchPlants}
-          className="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-all shadow-sm"
+    <div>
+      <div className="flex justify-between items-center mb-8">
+        <div className='flex flex-grow'></div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 
+          transition duration-200 flex items-center gap-2 cursor-pointer"
         >
-          <MdRefresh /> Refresh
+          <FaPlus />
+          Add New Record
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 text-red-700 rounded shadow-sm">
-          {error}
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100 mb-6">
+        <div className="relative">
+          <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search records..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 
+              focus:ring-green-500 focus:border-transparent outline-none"
+          />
         </div>
-      )}
+      </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">ID</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Quantity</th>
-              <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {currentPlants.length > 0 ? (
-              currentPlants.map((plant) => (
-                <tr key={plant.id} className="hover:bg-green-50/30 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-400 font-mono">#{plant.id}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-800">{plant.name}</td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-medium uppercase">
-                      {plant.category || 'General'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{plant.quantity}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleDelete(plant.id)}
-                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                      title="Delete Record"
-                    >
-                      <MdDelete size={22} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
+      {/* Records Table */}
+      {/* TODO implement pagination plants table */}
+      <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto max-h-[580px] overflow-y-auto">
+          <table className="relative w-full">
+            <thead className="bg-green-50 sticky top-0 z-10">
               <tr>
-                <td colSpan="5" className="px-6 py-12 text-center text-gray-400 italic">
-                  No plant records found.
-                </td>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Plant Name</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Variety</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">batch Name</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Seedling Source</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Seedling Count</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Starting Fund</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Date Planted</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
 
-        {/* Pagination Footer */}
-        {plants.length > 0 && (
-          <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
-            <span className="text-sm text-gray-500">
-              Page <span className="font-semibold text-gray-700">{currentPage}</span> of {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => paginate(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-opacity shadow-sm"
-              >
-                <MdChevronLeft size={20} />
-              </button>
-              <button
-                onClick={() => paginate(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-opacity shadow-sm"
-              >
-                <MdChevronRight size={20} />
-              </button>
-            </div>
+              {
+                isLoading && records.length === 0 ?
+                  (
+                    <tr>
+                      <td colSpan={8} className='py-10'>
+                        <PlantLoading size='2xl' variant='pulse' text="Loading records" />
+                      </td>
+                    </tr>
+                  ) : (
+                    <>
+                      {filteredRecords.map((record) => (
+                        <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-4 px-6 text-sm text-gray-800 font-medium">{record.name}</td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{record?.variety || "-"}</td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{record?.batch_name || "-"}</td>
+                          <td className="py-4 px-6 text-sm text-gray-800 font-medium">{record?.seedling_source || "-"}</td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{record?.seedling_count || "-"}</td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{record?.starting_fund || "0"}</td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{record?.date_planted || "-"}</td>
+                          <td className="py-4 px-6">
+                            <div className="flex gap-2">
+                              <button className="cursor-pointer text-blue-600 hover:text-blue-700 p-2 hover:bg-blue-50 rounded"
+                                title="Edit Record"
+                                onClick={() => { setDataToUpdate(record); setIsEditRecord(true) }}>
+                                <FaEdit />
+                              </button>
+                              <button className="cursor-pointer text-red-600 hover:text-red-700 p-2 
+                                hover:bg-red-50 rounded"
+                                onClick={() => { handleDeleteRecord(record) }}
+                                title="Delete Record">
+                                <FaTrash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {/* loading more indicator */}
+                      {
+                        isLoadingMore && (
+                          <tr>
+                            <td colSpan={8} className='py-6'>
+                              <PlantLoading size='lg' variant='pulse' text="Loading more records..." />
+                            </td>
+                          </tr>
+                        )
+                      }
+                      {/* intersection observer target */}
+                      {
+                        !searchTerm && hasMore && !isLoadingMore && (
+                          <tr ref={observerTarget}>
+                            <td colSpan={8} className='py-4 text-center text-gray-400 text-sm'>
+                              Scroll for more...
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                    </>
+                  )
+              }
+            </tbody>
+          </table>
+        </div>
+
+        {searchTerm && filteredRecords.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No records found matching your search.
+          </div>
+        )}
+
+        {/* End of Records Indicator */}
+        {!hasMore && records.length > 0 && !searchTerm && (
+          <div className="text-center py-4 text-gray-400 text-sm border-t border-gray-100">
+            No more records to load
           </div>
         )}
       </div>
-    </div>
-  );
-};
 
-export default Records;
+      {/* Modal */}
+      <ModalNewRecord
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleAddRecord}
+      />
+
+      <ModalEditRecord
+        isOpen={isEditRecord}
+        onClose={() => setIsEditRecord(false)}
+        data={dataToUpdate}
+        onSubmit={handleUpdateRecord}
+      />
+    </div>
+  )
+}
+
+export default Records
