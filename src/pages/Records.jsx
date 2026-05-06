@@ -27,12 +27,8 @@ function Records() {
       const response = await api.get(`plants/search?q=${searchTerm}&page=${page}`);
       const newRecords = response.data.data;
       
-      if (page === 1) {
-        setRecords(newRecords);
-      } else {
-        // Append results for pagination
-        setRecords(prev => [...prev, ...newRecords]);
-      }
+      // Replace records completely for proper pagination
+      setRecords(newRecords);
       
       // Check if there are more results available (assuming page limit of 10)
       setHasMoreSearch(newRecords.length === 10);
@@ -171,7 +167,7 @@ function Records() {
 
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto max-h-[580px] overflow-y-auto">
+        <div className="overflow-x-auto">
           <table className="relative w-full">
             <thead className="bg-green-50 sticky top-0 z-10">
               <tr>
@@ -239,7 +235,8 @@ function Records() {
         {!searchTerm && (
           <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
             <div className="text-sm text-gray-600">
-              Showing page <span className="font-semibold text-green-700">{currentPage}</span>
+              Page <span className="font-semibold text-green-700">{currentPage}</span> • 
+              Showing {records.length} plant{records.length !== 1 ? 's' : ''}
             </div>
             <div className="flex gap-2">
               <button
@@ -264,7 +261,8 @@ function Records() {
         {searchTerm && (
           <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
             <div className="text-sm text-gray-600">
-              Showing search results <span className="font-semibold text-green-700">page {searchPage}</span>
+              Page <span className="font-semibold text-green-700">{searchPage}</span> • 
+              Found {records.length} result{records.length !== 1 ? 's' : ''}
             </div>
             <div className="flex gap-2">
               <button
