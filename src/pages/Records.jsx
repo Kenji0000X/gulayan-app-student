@@ -16,14 +16,26 @@ function Records() {
   //pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  // search pagination states
+  const [searchPage, setSearchPage] = useState(1);
+  const [hasMoreSearch, setHasMoreSearch] = useState(true);
   const isInInitialMount = useRef(true);
 
-  const handleSearchPlants = async () => {
+  const handleSearchPlants = async (page = 1) => {
     try {
       setIsLoading(true);
-      const response = await api.get(`plants/search?q=${searchTerm}`);
-      setRecords(response.data.data);
-      setHasMore(false);
+      const response = await api.get(`plants/search?q=${searchTerm}&page=${page}`);
+      const newRecords = response.data.data;
+      
+      if (page === 1) {
+        setRecords(newRecords);
+      } else {
+        // Append results for pagination
+        setRecords(prev => [...prev, ...newRecords]);
+      }
+      
+      // Check if there are more results available (assuming page limit of 10)
+      setHasMoreSearch(newRecords.length === 10);
     } catch (error) {
       console.error(error);
       toast.error("Error searching records.");
@@ -118,9 +130,9 @@ function Records() {
       return;
     }
     if (searchTerm) {
-      setCurrentPage(1);
-      setHasMore(false);
-      handleSearchPlants();
+      setSearchPage(1);
+      setHasMoreSearch(true);
+      handleSearchPlants(1);
     } else {
       setCurrentPage(1);
       setHasMore(true);
@@ -240,6 +252,39 @@ function Records() {
               <button
                 disabled={!hasMore || isLoading}
                 onClick={() => setCurrentPage(prev => prev + 1)}
+                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <FaChevronRight className="text-gray-600" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Search Results Pagination Controls */}
+        {searchTerm && (
+          <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-100">
+            <div className="text-sm text-gray-600">
+              Showing search results <span className="font-semibold text-green-700">page {searchPage}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                disabled={searchPage === 1 || isLoading}
+                onClick={() => {
+                  const prevPage = searchPage - 1;
+                  setSearchPage(prevPage);
+                  handleSearchPlants(prevPage);
+                }}
+                className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                <FaChevronLeft className="text-gray-600" />
+              </button>
+              <button
+                disabled={!hasMoreSearch || isLoading}
+                onClick={() => {
+                  const nextPage = searchPage + 1;
+                  setSearchPage(nextPage);
+                  handleSearchPlants(nextPage);
+                }}
                 className="p-2 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
               >
                 <FaChevronRight className="text-gray-600" />
