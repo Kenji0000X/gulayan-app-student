@@ -185,7 +185,7 @@ function Records() {
               <tr>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Plant Name</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Variety</th>
-                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Batch Name</th>
+                <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">batch Name</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Seedling Source</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Seedling Count</th>
                 <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Starting Fund</th>
