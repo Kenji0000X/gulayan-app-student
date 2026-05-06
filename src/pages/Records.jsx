@@ -40,8 +40,9 @@ function Records() {
       const newRecords = response.data.data;
       
       setRecords(newRecords);
-      // Assuming a page limit of 10. If we get exactly 10, there might be more.
-      setHasMore(newRecords.length === 10); 
+      // Check if we got a full page of records (10 items = full page, so there might be more)
+      // If we get less than 10, we're on the last page
+      setHasMore(newRecords.length >= 10); 
     } catch (error) {
       toast.error("Error loading records.");
     } finally {
@@ -79,17 +80,26 @@ function Records() {
       const isDelete = confirm("Are you sure you want to delete this record?");
       if (!isDelete) return;
 
+      // Store the original records in case we need to restore them
+      const originalRecords = records;
+      const wasLastItemOnPage = records.length === 1;
+
+      // Optimistically remove the record from the UI
+      setRecords(prev => prev.filter(record => record.id !== data.id));
+
+      // Make the API call
       await api.delete(`plants/${data.id}`);
       toast.success("Plant data deleted.");
 
-      // If the current page only had one item and we aren't on page 1, go back.
-      if (records.length === 1 && currentPage > 1) {
+      // Handle pagination after successful deletion
+      if (wasLastItemOnPage && currentPage > 1) {
+        // If this was the last item on this page and we're not on page 1, go back
         setCurrentPage(prev => prev - 1);
-      } else {
-        // Refresh current page to pull in the next available record from the next page
-        handleLoadRecords(currentPage);
       }
     } catch (error) {
+      console.error(error);
+      // Restore the original records if deletion failed
+      setRecords(originalRecords);
       toast.error("Error encountered while deleting record.");
     }
   }
